@@ -41,6 +41,10 @@
 #include "delay.h"
 #include "wait.h"
 
+#ifdef LIBSCLOG
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wformat-overflow"
+#endif
 /* In some libc, these aren't declared. Do it ourself: */
 extern char **environ;
 extern int optind;
@@ -3713,6 +3717,7 @@ terminate(void)
 	exit(exit_code);
 }
 
+#ifndef LIBSCLOG
 int
 main(int argc, char *argv[])
 {
@@ -3725,3 +3730,62 @@ main(int argc, char *argv[])
 		;
 	terminate();
 }
+#else
+static struct tcb log_tcp;
+
+static void _log_syscall(void) {
+    // TODO: errno? 
+    struct tcb *tcp = current_tcp;
+    if(!scno_is_valid(tcp->scno)) {
+        // TODO: indirect syscall?
+        tprintf("Unsupported system call %ld\n",tcp->scno);
+        return;
+    }
+    
+	tprintf("%s(", tcp_sysent(tcp)->sys_name);
+    int res;
+
+    // entering
+    tcp->flags &= ~TCB_INSYSCALL;
+    res = raw(tcp) ? printargs(tcp) : tcp_sysent(tcp)->sys_func(tcp);
+    tcp->sys_func_rval = res;
+
+    // exiting
+    tcp->flags |= TCB_INSYSCALL;
+	if (tcp->sys_func_rval & RVAL_DECODED) {
+        // args decoded finished
+    }
+    else {
+        res = raw(tcp) ? printargs(tcp) : tcp_sysent(tcp)->sys_func(tcp);
+    }
+    tprintf(") = %ld\n", tcp->u_rval);
+	fflush(tcp->outf);
+	return;
+}
+
+void log_syscall(intptr_t scno, int argn, intptr_t args[], intptr_t rval) {
+    if(!scno_is_valid(scno)) {
+        // TODO: indirect syscall?
+        tprintf("Unsupported system call %ld\n", scno);
+        return;
+    }
+
+    current_tcp->scno = scno;
+    current_tcp->true_scno = scno;
+    current_tcp->s_ent = &sysent[current_tcp->scno];
+    current_tcp->qual_flg = qual_flags(current_tcp->scno);
+    if(argn > MAX_ARGS) {
+        tprintf("WARN: %d args > %d (MAX) !!\n", argn, MAX_ARGS);
+        argn = MAX_ARGS;
+    }
+    memcpy(current_tcp->u_arg, args, argn * sizeof(intptr_t));
+    current_tcp->u_rval = rval;
+    _log_syscall();
+}
+
+void init_sclog(const char *path) {
+    set_current_tcp(&log_tcp);
+    current_tcp->outf = fopen(path, "w");
+    qualify_verbose("all");
+}
+#endif

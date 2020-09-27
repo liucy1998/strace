@@ -40,6 +40,10 @@ static ssize_t strace_process_vm_readv(pid_t pid,
 # define process_vm_readv strace_process_vm_readv
 #endif /* !HAVE_PROCESS_VM_READV */
 
+#ifdef LIBSCLOG
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
+
 static ssize_t
 process_read_mem(const pid_t pid, void *const laddr,
 		 void *const raddr, const size_t len)
@@ -243,6 +247,11 @@ int
 umoven(struct tcb *const tcp, kernel_ulong_t addr, unsigned int len,
        void *const our_addr)
 {
+#ifdef LIBSCLOG
+	memcpy((void *) our_addr, (void *) addr, len);
+	// always succeed
+	return 0;
+#else
 	if (tracee_addr_is_invalid(addr))
 		return -1;
 
@@ -275,6 +284,7 @@ umoven(struct tcb *const tcp, kernel_ulong_t addr, unsigned int len,
 			perror_func_msg("pid:%d @0x%" PRI_klx, pid, addr);
 			return -1;
 	}
+#endif
 }
 
 /*
@@ -350,6 +360,17 @@ int
 umovestr(struct tcb *const tcp, kernel_ulong_t addr, unsigned int len,
 	 char *laddr)
 {
+#ifdef LIBSCLOG
+	strncpy(laddr, (const char *) addr, len);
+	// If the length of src is less than n, strncpy() writes additional null
+    // bytes to dest to ensure that a total of n bytes are written.
+	if(laddr[len-1] == 0) {
+		return 0;
+	}
+	else {
+		return len+1;
+	}
+#else
 	if (tracee_addr_is_invalid(addr))
 		return -1;
 
@@ -410,6 +431,7 @@ umovestr(struct tcb *const tcp, kernel_ulong_t addr, unsigned int len,
 				return -1;
 		}
 	}
-
+	
 	return 0;
+#endif
 }

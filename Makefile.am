@@ -384,12 +384,20 @@ libstrace_a_SOURCES =	\
 	$(strace_SOURCES_check) \
 	# end of libstrace_a_SOURCES
 
+noinst_LIBRARIES += libsclog.a
+libsclog_a_LIBADD = 
+libsclog_a_CPPFLAGS = $(AM_CPPFLAGS)
+libsclog_a_CFLAGS = $(AM_CFLAGS) -DLIBSCLOG
+libsclog_a_SOURCES = $(libstrace_a_SOURCES) strace.c sclog.h
+
 strace_SOURCES_check = bpf_attr_check.c $(TYPES_CHECK_FILES)
 
 if ENABLE_STACKTRACE
 libstrace_a_SOURCES += unwind.c unwind.h
+libsclog_a_SOURCES += unwind.c unwind.h
 if USE_LIBDW
 libstrace_a_SOURCES += unwind-libdw.c
+libsclog_a_SOURCES += unwind-libdw.c
 strace_CPPFLAGS += $(libdw_CPPFLAGS)
 strace_CFLAGS += $(libdw_CFLAGS)
 strace_LDFLAGS += $(libdw_LDFLAGS)
@@ -397,6 +405,7 @@ strace_LDADD += $(libdw_LIBS)
 endif
 if USE_LIBUNWIND
 libstrace_a_SOURCES += unwind-libunwind.c
+libsclog_a_SOURCES += unwind-libunwind.c
 strace_CPPFLAGS += $(libunwind_CPPFLAGS)
 strace_LDFLAGS += $(libunwind_LDFLAGS)
 strace_LDADD += $(libunwind_LIBS)
@@ -405,6 +414,7 @@ if USE_DEMANGLE
 strace_CPPFLAGS += $(libiberty_CPPFLAGS)
 strace_LDFLAGS += $(libiberty_LDFLAGS)
 strace_LDADD += $(libiberty_LIBS)
+libsclog_a_LIBADD += $(libiberty_OBJECTS)
 endif
 endif
 
@@ -416,6 +426,8 @@ CODE_COVERAGE_IGNORE_PATTERN = '/usr/include/*' '*/tests/*' '*/tests-m32/*' '*/t
 strace_CPPFLAGS += $(CODE_COVERAGE_CPPFLAGS)
 strace_CFLAGS += $(CODE_COVERAGE_CFLAGS)
 strace_LDADD += $(CODE_COVERAGE_LIBS)
+
+libsclog_a_LIBADD += $(CODE_COVERAGE_OBJECTS)
 
 # Enable this to get link map generated
 #strace_LDFLAGS += -Wl,-Map=strace.mapfile
@@ -1172,6 +1184,7 @@ native_printer_decls.h native_printer_defs.h: mpers_PREFIX =
 if HAVE_M32_MPERS
 
 strace_LDADD += libmpers-m32.a
+libsclog_a_LIBADD += $(libmpers_m32_a_OBJECTS) 
 noinst_LIBRARIES += libmpers-m32.a
 libmpers_m32_a_SOURCES = $(mpers_source_files)
 libmpers_m32_a_CPPFLAGS = $(libmpers_CPPFLAGS) -DMPERS_IS_m32 -I$(builddir)/mpers-m32
@@ -1191,6 +1204,7 @@ endif # HAVE_M32_MPERS
 if HAVE_MX32_MPERS
 
 strace_LDADD += libmpers-mx32.a
+libsclog_a_LIBADD += $(libmpers_mx32_a_OBJECTS) 
 noinst_LIBRARIES += libmpers-mx32.a
 libmpers_mx32_a_SOURCES = $(mpers_source_files)
 libmpers_mx32_a_CPPFLAGS = $(libmpers_CPPFLAGS) -DMPERS_IS_mx32 -I$(builddir)/mpers-mx32
