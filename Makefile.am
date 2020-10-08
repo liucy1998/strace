@@ -388,7 +388,7 @@ noinst_LIBRARIES += libsclog.a
 libsclog_a_LIBADD = 
 libsclog_a_CPPFLAGS = $(AM_CPPFLAGS)
 libsclog_a_CFLAGS = $(AM_CFLAGS) -DLIBSCLOG
-libsclog_a_SOURCES = $(libstrace_a_SOURCES) strace.c sclog.h
+libsclog_a_SOURCES = $(libstrace_a_SOURCES) strace.c
 
 strace_SOURCES_check = bpf_attr_check.c $(TYPES_CHECK_FILES)
 
