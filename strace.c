@@ -3788,4 +3788,13 @@ void init_sclog(const char *path) {
     current_tcp->outf = fopen(path, "w");
     qualify_verbose("all");
 }
+
+void log_syscall_printf(const char *fmt, ...)
+{
+	va_list args;
+	va_start(args, fmt);
+	tvprintf(fmt, args);
+	va_end(args);
+}
+
 #endif
