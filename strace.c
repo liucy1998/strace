@@ -3785,7 +3785,7 @@ void log_syscall(intptr_t scno, int argn, intptr_t args[], intptr_t rval) {
 
 void init_sclog(const char *path) {
     set_current_tcp(&log_tcp);
-    current_tcp->outf = fopen(path, "w");
+    current_tcp->outf = fopen(path, "a");
     qualify_verbose("all");
 }
 
