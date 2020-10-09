@@ -3775,7 +3775,7 @@ void log_syscall(intptr_t scno, int argn, intptr_t args[], intptr_t rval) {
     current_tcp->s_ent = &sysent[current_tcp->scno];
     current_tcp->qual_flg = qual_flags(current_tcp->scno);
     if(argn > MAX_ARGS) {
-        tprintf("WARN: %d args > %d (MAX) !!\n", argn, MAX_ARGS);
+        // tprintf("WARN: %d args > %d (MAX) !!\n", argn, MAX_ARGS);
         argn = MAX_ARGS;
     }
     memcpy(current_tcp->u_arg, args, argn * sizeof(intptr_t));
