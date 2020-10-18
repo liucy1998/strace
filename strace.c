@@ -3798,4 +3798,12 @@ void log_syscall_printf(const char *fmt, ...)
 	va_end(args);
 }
 
+// log index & system call with atomicity
+void log_syscall_with_index(uint idx, intptr_t scno, int argn, intptr_t args[], intptr_t rval) {
+	flockfile(current_tcp->outf);
+	log_syscall_printf("%u: ", idx);
+	log_syscall(scno, argn, args, rval);
+	funlockfile(current_tcp->outf);
+}
+
 #endif
