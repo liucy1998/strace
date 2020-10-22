@@ -3783,9 +3783,9 @@ void log_syscall(intptr_t scno, int argn, intptr_t args[], intptr_t rval) {
     _log_syscall();
 }
 
-void init_sclog(const char *path) {
+void init_sclog(const char *path, const char *mode) {
     set_current_tcp(&log_tcp);
-    current_tcp->outf = fopen(path, "a");
+    current_tcp->outf = fopen(path, mode);
 	max_strlen = 1000;
     qualify_verbose("all");
 }
