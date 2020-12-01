@@ -837,4 +837,5 @@ AC_CONFIG_FILES([Makefile
 		 strace-log-merge.1
 		 strace.spec
 		 debian/changelog])
+AX_PTHREAD
 AC_OUTPUT

@@ -3731,9 +3731,23 @@ main(int argc, char *argv[])
 	terminate();
 }
 #else
-static struct tcb log_tcp;
 
-static void _log_syscall(void) {
+#include <pthread.h>
+
+static struct tcb log_tcp;
+pthread_mutex_t outf_mutex;
+
+static inline void _switch_outf(FILE *f) {
+	pthread_mutex_lock(&outf_mutex);
+	current_tcp->outf = f;
+}
+
+static inline void _switch_outf_end(void) {
+	flush_tcp_output(current_tcp);
+	pthread_mutex_unlock(&outf_mutex);
+}
+
+static void __log_syscall(void) {
     // TODO: errno? 
     struct tcb *tcp = current_tcp;
     if(!scno_is_valid(tcp->scno)) {
@@ -3763,10 +3777,11 @@ static void _log_syscall(void) {
 	return;
 }
 
-void log_syscall(intptr_t scno, int argn, intptr_t args[], intptr_t rval) {
+static void _log_syscall(intptr_t scno, int argn, intptr_t args[], intptr_t rval) {
     if(!scno_is_valid(scno)) {
         // TODO: indirect syscall?
         tprintf("Unsupported system call %ld\n", scno);
+		_switch_outf_end();
         return;
     }
 
@@ -3780,17 +3795,16 @@ void log_syscall(intptr_t scno, int argn, intptr_t args[], intptr_t rval) {
     }
     memcpy(current_tcp->u_arg, args, argn * sizeof(intptr_t));
     current_tcp->u_rval = rval;
-    _log_syscall();
+    __log_syscall();
 }
 
-void init_sclog(const char *path, const char *mode) {
+void init_sclog(void) {
     set_current_tcp(&log_tcp);
-    current_tcp->outf = fopen(path, mode);
 	max_strlen = 1000;
     qualify_verbose("all");
 }
 
-void log_syscall_printf(const char *fmt, ...)
+static void _log_syscall_printf(const char *fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
@@ -3798,12 +3812,24 @@ void log_syscall_printf(const char *fmt, ...)
 	va_end(args);
 }
 
-// log index & system call with atomicity
-void log_syscall_with_index(uint idx, intptr_t scno, int argn, intptr_t args[], intptr_t rval) {
+void log_syscall_printf(FILE *f, const char *fmt, ...)
+{
+	_switch_outf(f);
+	va_list args;
+	va_start(args, fmt);
+	tvprintf(fmt, args);
+	va_end(args);
+	_switch_outf_end();
+}
+
+// thread-safe log index & system call with atomicity
+void log_syscall_with_index(FILE *f, uint idx, intptr_t scno, int argn, intptr_t args[], intptr_t rval) {
+	_switch_outf(f);
 	flockfile(current_tcp->outf);
-	log_syscall_printf("%u: ", idx);
-	log_syscall(scno, argn, args, rval);
+	_log_syscall_printf("%u: ", idx);
+	_log_syscall(scno, argn, args, rval);
 	funlockfile(current_tcp->outf);
+	_switch_outf_end();
 }
 
 #endif
