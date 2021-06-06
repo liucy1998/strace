@@ -18,6 +18,10 @@
 #include "scno.h"
 #include "ptrace.h"
 
+#ifdef LIBSCLOG
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
+
 static bool process_vm_readv_not_supported;
 static bool process_vm_writev_not_supported;
 
@@ -294,6 +298,10 @@ int
 umoven(struct tcb *const tcp, kernel_ulong_t addr, unsigned int len,
        void *const our_addr)
 {
+#ifdef LIBSCLOG
+	memcpy((void *)our_addr, (void *)addr, len);
+	return 0;
+#else
 	if (tracee_addr_is_invalid(addr))
 		return -1;
 
@@ -326,6 +334,7 @@ umoven(struct tcb *const tcp, kernel_ulong_t addr, unsigned int len,
 			perror_func_msg("pid:%d @0x%" PRI_klx, pid, addr);
 			return -1;
 	}
+#endif
 }
 
 /*
@@ -401,6 +410,17 @@ int
 umovestr(struct tcb *const tcp, kernel_ulong_t addr, unsigned int len,
 	 char *laddr)
 {
+#ifdef LIBSCLOG
+	strncpy(laddr, (const char *)addr, len);
+	// If the length of src is less than n, strncpy() writes additional null
+    // bytes to dest to ensure that a total of n bytes are written.
+	if(laddr[len-1] == 0) {
+		return 0;
+	}
+	else {
+		return len+1;
+	}
+#else
 	if (tracee_addr_is_invalid(addr))
 		return -1;
 
@@ -463,6 +483,7 @@ umovestr(struct tcb *const tcp, kernel_ulong_t addr, unsigned int len,
 	}
 
 	return 0;
+#endif
 }
 
 static unsigned int

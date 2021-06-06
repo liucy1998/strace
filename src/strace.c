@@ -42,6 +42,11 @@
 #include "wait.h"
 #include "secontext.h"
 
+#ifdef LIBSCLOG
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wformat-overflow"
+#endif
+
 /* In some libc, these aren't declared. Do it ourself: */
 extern char **environ;
 extern int optind;
@@ -3768,6 +3773,7 @@ terminate(void)
 	exit(exit_code);
 }
 
+#ifndef LIBSCLOG
 int
 main(int argc, char *argv[])
 {
@@ -3780,3 +3786,138 @@ main(int argc, char *argv[])
 		;
 	terminate();
 }
+#else
+#include <pthread.h>
+
+#define MAX_TCP_NUM 32
+static struct tcb sclog_tcp[MAX_TCP_NUM];
+pthread_mutex_t tcp_big_lock;
+void set_log_file(int log_idx, FILE *f) {
+	if (log_idx >= MAX_TCP_NUM) {
+		return;
+	}
+	sclog_tcp[log_idx].outf = f;
+}
+
+static void __log_syscall(bool entering) {
+    // TODO: errno? 
+    struct tcb *tcp = current_tcp;
+	int res = 0;
+    if(!scno_is_valid(tcp->scno)) {
+        // TODO: indirect syscall?
+        tprintf("Unsupported system call %ld\n",tcp->scno);
+        return;
+    }
+    
+	if(entering) {
+		// entering
+		tprintf("%s(", tcp_sysent(tcp)->sys_name);
+
+		tcp->flags &= ~TCB_INSYSCALL;
+		res = raw(tcp) ? printargs(tcp) : tcp_sysent(tcp)->sys_func(tcp);
+		tcp->sys_func_rval = res;
+	}
+
+	else {
+		// exiting
+		tcp->flags |= TCB_INSYSCALL;
+		// for restart_syscall
+		tcp->s_prev_ent = tcp->s_ent;
+		if (tcp->sys_func_rval & RVAL_DECODED) {
+			// args decoded finished
+			res = tcp -> sys_func_rval;
+		}
+		else {
+			res = raw(tcp) ? printargs(tcp) : tcp_sysent(tcp)->sys_func(tcp);
+		}
+
+		if((tcp->u_rval < 0) && tcp->u_error) {
+			tprintf(") = %ld {%ld}", tcp->u_rval, tcp->u_error);
+		}
+		else {
+			tprintf(") = %ld {0}", tcp->u_rval);
+		}
+
+		// reference: syscall.c: syscall_exiting_finish
+		tcp->flags &= ~(TCB_INSYSCALL | TCB_TAMPERED | TCB_INJECT_DELAY_EXIT);
+		tcp->sys_func_rval = 0;
+		free_tcb_priv_data(tcp); // if not free, following syscalls cannot use priv data pointer 
+	}
+	fflush(tcp->outf);
+}
+
+static void _log_syscall(intptr_t scno, int argn, intptr_t args[], intptr_t rval, intptr_t err, bool entering) {
+    if(!scno_is_valid(scno)) {
+        // TODO: indirect syscall?
+        tprintf("Unsupported system call %ld\n", scno);
+        return;
+    }
+    current_tcp->scno = scno;
+    current_tcp->true_scno = scno;
+    current_tcp->s_ent = &sysent[current_tcp->scno];
+    current_tcp->qual_flg = qual_flags(current_tcp->scno);
+    if(argn > MAX_ARGS) {
+        // tprintf("WARN: %d args > %d (MAX) !!\n", argn, MAX_ARGS);
+        argn = MAX_ARGS;
+    }
+    memcpy(current_tcp->u_arg, args, argn * sizeof(intptr_t));
+    current_tcp->u_rval = rval;
+    current_tcp->u_error = err;
+    __log_syscall(entering);
+}
+
+void init_sclog(void) {
+	max_strlen = 1000;
+    qualify_verbose("all");
+}
+
+static void _log_syscall_printf(const char *fmt, ...)
+{
+	va_list args;
+	va_start(args, fmt);
+	tvprintf(fmt, args);
+	va_end(args);
+}
+
+void log_syscall_printf(int log_idx, const char *fmt, ...)
+{
+	if (log_idx >= MAX_TCP_NUM) {
+		return;
+	}
+	pthread_mutex_lock(&tcp_big_lock);
+	current_tcp = &sclog_tcp[log_idx];
+	va_list args;
+	va_start(args, fmt);
+	tvprintf(fmt, args);
+	va_end(args);
+	fflush(current_tcp->outf);
+	pthread_mutex_unlock(&tcp_big_lock);
+}
+
+// thread-safe log index & system call with atomicity
+void log_syscall_with_index(int log_idx, uint idx, intptr_t scno, int argn, intptr_t args[], intptr_t rval, intptr_t err, bool entering) {
+	if (log_idx >= MAX_TCP_NUM) {
+		return;
+	}
+    if(!scno_is_valid(scno)) {
+        // TODO: indirect syscall?
+        return;
+    }
+	pthread_mutex_lock(&tcp_big_lock);
+	current_tcp = &sclog_tcp[log_idx];
+	if(entering) {
+		_log_syscall_printf("\n%u: ", idx);
+	}
+	_log_syscall(scno, argn, args, rval, err, entering);
+	flush_tcp_output(current_tcp);
+	pthread_mutex_unlock(&tcp_big_lock);
+}
+
+int get_trace_size(int log_idx) {
+	if (log_idx >= MAX_TCP_NUM) {
+		return -1;
+	}
+	return ftell(sclog_tcp[log_idx].outf);
+}
+
+#endif
